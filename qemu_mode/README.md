@@ -30,6 +30,9 @@ libtool and glib2-devel).
 Once the binaries are compiled, you can leverage the QEMU tool by calling
 afl-fuzz and all the related utilities with -Q in the command line.
 
+This tree also carries a BinRadar compatibility mode for replacing LibAFL's
+`qemu_stacktrace` runner. See [README.binradar_stacktrace.md](README.binradar_stacktrace.md).
+
 Note that QEMU requires a generous memory limit to run; somewhere around
 200 MB is a good starting point, but considerably more may be needed for
 more complex programs. The default -m limit will be automatically bumped up

@@ -304,14 +304,15 @@ static u32 write_results_to_file(afl_forkserver_t *fsrv, u8 *outfile) {
 
 /* Execute target application. */
 
-static void showmap_run_target_forkserver(afl_forkserver_t *fsrv, u8 *mem,
+static fsrv_run_result_t showmap_run_target_forkserver(afl_forkserver_t *fsrv, u8 *mem,
                                           u32 len) {
 
   afl_fsrv_write_to_testcase(fsrv, mem, len);
 
   if (!quiet_mode) { SAYF("-- Program output begins --\n" cRST); }
 
-  if (afl_fsrv_run_target(fsrv, fsrv->exec_tmout, &stop_soon) ==
+  fsrv_run_result_t res = afl_fsrv_run_target(fsrv, fsrv->exec_tmout, &stop_soon);
+  if (res ==
       FSRV_RUN_ERROR) {
 
     FATAL("Error running target");
@@ -370,6 +371,7 @@ static void showmap_run_target_forkserver(afl_forkserver_t *fsrv, u8 *mem,
 
   }
 
+  return res;
 }
 
 /* Read initial file. */
@@ -1113,9 +1115,18 @@ int main(int argc, char **argv_orig, char **envp) {
 
     }
 
-    stdin_file = at_file ? strdup(at_file)
-                         : (char *)alloc_printf("%s/.afl-showmap-temp-%u",
-                                                use_dir, (u32)getpid());
+    stdin_file = at_file ? strdup(at_file) : NULL;
+    if (!at_file) {
+      char* file_ext = get_afl_env("FILE_EXT");
+      if (file_ext) {
+        stdin_file =
+          (char *)alloc_printf("%s/.afl-showmap-temp-%u.%s", use_dir, (u32)getpid(), file_ext);
+      } else { 
+        stdin_file =
+          alloc_printf("%s/.afl-showmap-temp-%u", use_dir, (u32)getpid());
+      }
+    }
+                                              
     unlink(stdin_file);
     atexit(at_exit_handler);
     fsrv->out_file = stdin_file;
@@ -1209,10 +1220,10 @@ int main(int argc, char **argv_orig, char **envp) {
 #if !defined(DT_REG)                                          /* use stat() */
       if (-1 == stat(infile, &statbuf) || !S_ISREG(statbuf.st_mode)) continue;
 #endif
-
+#if 0
       if (!collect_coverage)
         snprintf(outfile, sizeof(outfile), "%s/%s", out_file, dir_ent->d_name);
-
+#endif
       if (read_file(infile)) {
 
         if (wait_for_gdb) {
@@ -1223,7 +1234,12 @@ int main(int argc, char **argv_orig, char **envp) {
 
         }
 
-        showmap_run_target_forkserver(fsrv, in_data, in_len);
+        fsrv_run_result_t res = showmap_run_target_forkserver(fsrv, in_data, in_len);
+        if (res == FSRV_RUN_CRASH) {
+          snprintf(outfile, sizeof(outfile), "%s/%s.crash", out_file, dir_ent->d_name);
+        } else {
+          snprintf(outfile, sizeof(outfile), "%s/%s", out_file, dir_ent->d_name);
+        }
         ck_free(in_data);
         if (collect_coverage)
           analyze_results(fsrv);
