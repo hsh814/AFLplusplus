@@ -6,4 +6,4 @@
 	url = https://github.com/AFLplusplus/Grammar-Mutator
 [submodule "qemu_mode/qemuafl"]
 	path = qemu_mode/qemuafl
-	url = https://github.com/AFLplusplus/qemuafl
+	url = https://github.com/UNIST-LOFT/qemu
