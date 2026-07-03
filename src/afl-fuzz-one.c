@@ -490,7 +490,7 @@ u8 fuzz_one_original(afl_state_t *afl) {
 
     }
 
-    if (unlikely(afl->stop_soon) || res != afl->crash_mode) {
+    if (unlikely(afl->stop_soon) || (res != FSRV_RUN_OK && res != FSRV_RUN_CRASH)) { // crash_mode
 
       ++afl->cur_skipped_paths;
       goto abandon_entry;
@@ -2919,7 +2919,7 @@ static u8 mopt_common_fuzzing(afl_state_t *afl, MOpt_globals_t MOpt_globals) {
 
     }
 
-    if (afl->stop_soon || res != afl->crash_mode) {
+    if (afl->stop_soon || (res != FSRV_RUN_OK && res != FSRV_RUN_CRASH)) { // crash_mode
 
       ++afl->cur_skipped_paths;
       goto abandon_entry;

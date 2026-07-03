@@ -91,6 +91,7 @@ void afl_fsrv_init(afl_forkserver_t *fsrv) {
   fsrv->map_size = get_map_size();
   fsrv->use_fauxsrv = false;
   fsrv->last_run_timed_out = false;
+  fsrv->target_reached = 0;
   fsrv->debug = false;
   fsrv->uses_crash_exitcode = false;
   fsrv->uses_asan = false;
@@ -1211,6 +1212,10 @@ fsrv_run_result_t afl_fsrv_run_target(afl_forkserver_t *fsrv, u32 timeout,
      behave very normally and do not have to be treated as volatile. */
 
   MEM_BARRIER();
+
+  /* Check if target address was reached (set by QEMU instrumentation). */
+
+  fsrv->target_reached = (fsrv->trace_bits[1] == 0xFF);
 
   /* Report outcome to caller. */
 

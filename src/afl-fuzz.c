@@ -95,6 +95,7 @@ static void usage(u8 *argv0, int more_help) {
       "Required parameters:\n"
       "  -i dir        - input directory with test cases\n"
       "  -o dir        - output directory for fuzzer findings\n\n"
+      "  -a addr       - address of the target location (e.g. 0x400000)\n"
 
       "Execution control settings:\n"
       "  -p schedule   - power schedules compute a seed's performance score:\n"
@@ -363,9 +364,16 @@ int main(int argc, char **argv_orig, char **envp) {
 
   while ((opt = getopt(
               argc, argv,
-              "+b:B:c:CdDe:E:hi:I:f:F:l:L:m:M:nNo:p:RQs:S:t:T:UV:Wx:Z")) > 0) {
+              "+a:b:B:c:CdDe:E:hi:I:f:F:l:L:m:M:nNo:p:RQs:S:t:T:UV:Wx:Z")) > 0) {
 
     switch (opt) {
+      case 'a':  // address of the target location
+
+        if (afl->target_addr) { FATAL("Multiple -a options not supported"); }
+
+        afl->target_addr = strtoul(optarg, 0L, 16);
+
+        break;
 
       case 'Z':
         afl->old_seed_selection = 1;
@@ -1525,6 +1533,17 @@ int main(int argc, char **argv_orig, char **envp) {
     afl->clean_trace_custom = ck_realloc(afl->clean_trace_custom, map_size);
     afl->first_trace = ck_realloc(afl->first_trace, map_size);
     afl->map_tmp_buf = ck_realloc(afl->map_tmp_buf, map_size);
+
+  }
+
+  /* Export target address to QEMU via env var, for -a mode. */
+
+  if (afl->target_addr) {
+
+    char addr_str[32];
+    snprintf(addr_str, sizeof(addr_str), "0x%llx",
+             (unsigned long long)afl->target_addr);
+    setenv("AFL_TARGET_ADDR", addr_str, 1);
 
   }
 

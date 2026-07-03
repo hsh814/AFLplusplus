@@ -481,7 +481,7 @@ save_if_interesting(afl_state_t *afl, void *mem, u32 len, u8 fault) {
 
   }
 
-  if (likely(fault == afl->crash_mode)) {
+  if (likely((fault == FSRV_RUN_OK || fault == FSRV_RUN_CRASH))) { // crash_mode
 
     /* Keep only if there are new bits in the map, add to queue for
        future fuzzing, etc. */
@@ -491,7 +491,65 @@ save_if_interesting(afl_state_t *afl, void *mem, u32 len, u8 fault) {
     if (likely(!new_bits)) {
 
       if (unlikely(afl->crash_mode)) { ++afl->total_crashes; }
-      return 0;
+
+      /* In target-reach mode (-a), save inputs that reach the target
+         even without new coverage, up to the limit. */
+
+      if (unlikely(afl->target_addr && afl->fsrv.target_reached &&
+                   afl->total_target_reaches < TARGET_REACH_LIMIT)) {
+
+        ++afl->total_target_reaches;
+
+#ifndef SIMPLE_FILES
+
+        queue_fn = alloc_printf(
+            "%s/queue/id:%06u,%s", afl->out_dir, afl->queued_paths,
+            describe_op(afl, 0, NAME_MAX - strlen("id:000000,")));
+
+#else
+
+        queue_fn =
+            alloc_printf("%s/queue/id_%06u", afl->out_dir, afl->queued_paths);
+
+#endif                                                    /* ^!SIMPLE_FILES */
+        fd = open(queue_fn, O_WRONLY | O_CREAT | O_EXCL, DEFAULT_PERMISSION);
+        if (unlikely(fd < 0)) { PFATAL("Unable to create '%s'", queue_fn); }
+        ck_write(fd, mem, len, queue_fn);
+        close(fd);
+        add_to_queue(afl, queue_fn, len, 0);
+
+        if (cksum)
+          afl->queue_top->exec_cksum = cksum;
+        else
+          cksum = afl->queue_top->exec_cksum =
+              hash64(afl->fsrv.trace_bits, afl->fsrv.map_size, HASH_CONST);
+
+        if (afl->schedule >= FAST && afl->schedule <= RARE) {
+
+          afl->queue_top->n_fuzz_entry = cksum % N_FUZZ_SIZE;
+          afl->n_fuzz[afl->queue_top->n_fuzz_entry] = 1;
+
+        }
+
+        res = calibrate_case(afl, afl->queue_top, mem, afl->queue_cycle - 1, 0);
+
+        if (unlikely(res == FSRV_RUN_ERROR)) {
+
+          FATAL("Unable to execute target application");
+
+        }
+
+        if (likely(afl->q_testcase_max_cache_size)) {
+
+          queue_testcase_store_mem(afl, afl->queue_top, mem);
+
+        }
+
+        keeping = 1;
+
+      }
+
+      return keeping;
 
     }
 
@@ -690,6 +748,16 @@ save_if_interesting(afl_state_t *afl, void *mem, u32 len, u8 fault) {
     case FSRV_RUN_CRASH:
 
     keep_as_crash:
+
+      /* In target-reach mode (-a), crash saves are replaced by target-reach
+         saves. Inputs that reached the target are handled above. */
+
+      if (unlikely(afl->target_addr)) {
+
+        ++afl->total_crashes;
+        return keeping;
+
+      }
 
       /* This is handled in a manner roughly similar to timeouts,
          except for slightly different limits and no need to re-run test

@@ -102,6 +102,7 @@ typedef struct afl_forkserver {
   void (*add_extra_func)(void *afl_ptr, u8 *mem, u32 len);
 
   u8 kill_signal;
+  u8 target_reached;
 
 } afl_forkserver_t;
 

@@ -492,5 +492,9 @@
 
 #define AFL_TXT_STRING_MAX_MUTATIONS 6
 
+/* Maximum number of target-reach inputs to save */
+
+#define TARGET_REACH_LIMIT 1000
+
 #endif                                                  /* ! _HAVE_CONFIG_H */
 

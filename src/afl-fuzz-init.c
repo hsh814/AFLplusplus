@@ -875,7 +875,7 @@ void perform_dry_run(afl_state_t *afl) {
 
       case FSRV_RUN_OK:
 
-        if (afl->crash_mode) { FATAL("Test case '%s' does *NOT* crash", fn); }
+        // if (afl->crash_mode) { FATAL("Test case '%s' does *NOT* crash", fn); }
 
         break;
 
@@ -921,7 +921,7 @@ void perform_dry_run(afl_state_t *afl) {
 
       case FSRV_RUN_CRASH:
 
-        if (afl->crash_mode) { break; }
+        break; // afl->crash_mode
 
         if (skip_crashes) {
 
