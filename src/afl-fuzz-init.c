@@ -1207,27 +1207,36 @@ void perform_dry_run(afl_state_t *afl) {
 
 }
 
-/* Helper function: link() if possible, copy otherwise. */
+/* Helper function: link() if possible, otherwise copy to an ignored partial
+   name and atomically link the completed file into the queue. */
 
 static void link_or_copy(u8 *old_path, u8 *new_path) {
 
   s32 i = link(old_path, new_path);
   s32 sfd, dfd;
   u8 *tmp;
+  u8 *partial_path;
 
   if (!i) { return; }
 
   sfd = open(old_path, O_RDONLY);
   if (sfd < 0) { PFATAL("Unable to open '%s'", old_path); }
 
-  dfd = open(new_path, O_WRONLY | O_CREAT | O_EXCL, DEFAULT_PERMISSION);
-  if (dfd < 0) { PFATAL("Unable to create '%s'", new_path); }
+  partial_path = alloc_printf("%s.binradar-part", new_path);
+  if (unlink(partial_path) && errno != ENOENT) {
+
+    PFATAL("Unable to remove stale partial testcase '%s'", partial_path);
+
+  }
+  dfd = open(partial_path, O_WRONLY | O_CREAT | O_EXCL,
+             DEFAULT_PERMISSION);
+  if (dfd < 0) { PFATAL("Unable to create '%s'", partial_path); }
 
   tmp = ck_alloc(64 * 1024);
 
   while ((i = read(sfd, tmp, 64 * 1024)) > 0) {
 
-    ck_write(dfd, tmp, i, new_path);
+    ck_write(dfd, tmp, i, partial_path);
 
   }
 
@@ -1235,7 +1244,18 @@ static void link_or_copy(u8 *old_path, u8 *new_path) {
 
   ck_free(tmp);
   close(sfd);
-  close(dfd);
+  if (close(dfd)) { PFATAL("Unable to close '%s'", partial_path); }
+  if (link(partial_path, new_path)) {
+
+    PFATAL("Unable to publish testcase '%s'", new_path);
+
+  }
+  if (unlink(partial_path)) {
+
+    PFATAL("Unable to remove published partial testcase '%s'", partial_path);
+
+  }
+  ck_free(partial_path);
 
 }
 

@@ -25,9 +25,46 @@
 
 #include "afl-fuzz.h"
 #include <limits.h>
+#include <errno.h>
 #if !defined NAME_MAX
   #define NAME_MAX _XOPEN_NAME_MAX
 #endif
+
+#define BINRADAR_PART_SUFFIX ".binradar-part"
+
+/* Publish testcase bytes only after the complete file has been closed. The
+   final hard link is atomic and preserves the old O_EXCL behavior. */
+static void publish_testcase(u8 *final_path, void *mem, u32 len) {
+
+  u8 *partial_path = alloc_printf("%s%s", final_path, BINRADAR_PART_SUFFIX);
+  if (unlink(partial_path) && errno != ENOENT) {
+
+    PFATAL("Unable to remove stale partial testcase '%s'", partial_path);
+
+  }
+
+  s32 fd = open(partial_path, O_WRONLY | O_CREAT | O_EXCL,
+                DEFAULT_PERMISSION);
+  if (unlikely(fd < 0)) {
+
+    PFATAL("Unable to create partial testcase '%s'", partial_path);
+
+  }
+  ck_write(fd, mem, len, partial_path);
+  if (close(fd)) { PFATAL("Unable to close partial testcase '%s'", partial_path); }
+  if (link(partial_path, final_path)) {
+
+    PFATAL("Unable to publish testcase '%s'", final_path);
+
+  }
+  if (unlink(partial_path)) {
+
+    PFATAL("Unable to remove published partial testcase '%s'", partial_path);
+
+  }
+  ck_free(partial_path);
+
+}
 
 /* Write bitmap to file. The bitmap is useful mostly for the secret
    -B option, to focus a separate fuzzing session on a particular
@@ -461,8 +498,7 @@ save_if_interesting(afl_state_t *afl, void *mem, u32 len, u8 fault) {
 
   u8 *queue_fn = "";
   u8  new_bits = '\0';
-  s32 fd;
-  u8  keeping = 0, res, classified = 0;
+  u8 keeping = 0, res, classified = 0;
   u64 cksum = 0;
 
   u8 fn[PATH_MAX];
@@ -512,10 +548,7 @@ save_if_interesting(afl_state_t *afl, void *mem, u32 len, u8 fault) {
             alloc_printf("%s/queue/id_%06u", afl->out_dir, afl->queued_paths);
 
 #endif                                                    /* ^!SIMPLE_FILES */
-        fd = open(queue_fn, O_WRONLY | O_CREAT | O_EXCL, DEFAULT_PERMISSION);
-        if (unlikely(fd < 0)) { PFATAL("Unable to create '%s'", queue_fn); }
-        ck_write(fd, mem, len, queue_fn);
-        close(fd);
+        publish_testcase(queue_fn, mem, len);
         add_to_queue(afl, queue_fn, len, 0);
 
         if (cksum)
@@ -567,10 +600,7 @@ save_if_interesting(afl_state_t *afl, void *mem, u32 len, u8 fault) {
         alloc_printf("%s/queue/id_%06u", afl->out_dir, afl->queued_paths);
 
 #endif                                                    /* ^!SIMPLE_FILES */
-    fd = open(queue_fn, O_WRONLY | O_CREAT | O_EXCL, DEFAULT_PERMISSION);
-    if (unlikely(fd < 0)) { PFATAL("Unable to create '%s'", queue_fn); }
-    ck_write(fd, mem, len, queue_fn);
-    close(fd);
+    publish_testcase(queue_fn, mem, len);
     add_to_queue(afl, queue_fn, len, 0);
 
 #ifdef INTROSPECTION
@@ -851,10 +881,7 @@ save_if_interesting(afl_state_t *afl, void *mem, u32 len, u8 fault) {
   /* If we're here, we apparently want to save the crash or hang
      test case, too. */
 
-  fd = open(fn, O_WRONLY | O_CREAT | O_EXCL, DEFAULT_PERMISSION);
-  if (unlikely(fd < 0)) { PFATAL("Unable to create '%s'", fn); }
-  ck_write(fd, mem, len, fn);
-  close(fd);
+  publish_testcase(fn, mem, len);
 
   return keeping;
 
