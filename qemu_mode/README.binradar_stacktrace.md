@@ -55,7 +55,7 @@ Expected key lines:
 - Public hooks are declared in `qemuafl/qemuafl/binradar-trace.h`.
 - Exact patch hits are emitted from `accel/tcg/translator.c` at instruction translation time.
 - Basic block hits are emitted from `accel/tcg/translate-all.c` when `--trace-basic-blocks` is enabled.
-- x86/x86_64 function attribution is emitted from `target/i386/tcg/translate.c` for direct calls, indirect calls, and returns.
+- x86/x86_64 function attribution is emitted from `target/i386/tcg/translate.c` for direct calls, indirect calls, and returns. A patch location that is itself a call is attributed to the current caller frame—the function containing that instruction—not to the call target. The patch hit is consumed before the callee frame is pushed; the same ordering applies to E9-relocated calls.
 - File tracing is emitted from `linux-user/syscall.c` after successful `open`, `openat`, `read`, `lseek`, `dup`, `dup2`, `dup3`, `fcntl`, and `close` syscalls.
 - Crash reporting is emitted from `linux-user/signal.c`; in compatibility mode it exits immediately after printing to avoid QEMU target core dumps.
 
