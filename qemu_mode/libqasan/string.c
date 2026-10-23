@@ -31,15 +31,19 @@ void *__libqasan_memcpy(void *dest, const void *src, size_t n) {
   unsigned char *      d = dest;
   const unsigned char *s = src;
 
-  if (!n) return dest;
+  /* Constant-size builtins provide unaligned, alias-safe word transfers.
+     Unlike libc vector routines these never read outside [src, src + n). */
+  while (n >= sizeof(uintptr_t)) {
 
-  while (n--) {
-
-    *d = *s;
-    ++d;
-    ++s;
+    uintptr_t word;
+    __builtin_memcpy(&word, s, sizeof(word));
+    __builtin_memcpy(d, &word, sizeof(word));
+    d += sizeof(word);
+    s += sizeof(word);
+    n -= sizeof(word);
 
   }
+  while (n--) *d++ = *s++;
 
   return dest;
 
@@ -50,16 +54,27 @@ void *__libqasan_memmove(void *dest, const void *src, size_t n) {
   unsigned char *      d = dest;
   const unsigned char *s = src;
 
-  if (!n) return dest;
+  if (!n || d == s) return dest;
 
-  if (!((d + n) >= s && d <= (s + n)))  // do not overlap
+  /* Integer addresses avoid ordering unrelated C objects. Only a destination
+     inside the source range requires backward copying. The public wrapper
+     checks the complete source, then destination, before reaching this code. */
+  if ((uintptr_t)d < (uintptr_t)s || (uintptr_t)d - (uintptr_t)s >= n)
     return __libqasan_memcpy(dest, src, n);
 
-  d = __libqasan_malloc(n);
-  __libqasan_memcpy(d, src, n);
-  __libqasan_memcpy(dest, d, n);
+  d += n;
+  s += n;
+  while (n >= sizeof(uintptr_t)) {
 
-  __libqasan_free(d);
+    uintptr_t word;
+    d -= sizeof(word);
+    s -= sizeof(word);
+    __builtin_memcpy(&word, s, sizeof(word));
+    __builtin_memcpy(d, &word, sizeof(word));
+    n -= sizeof(word);
+
+  }
+  while (n--) *--d = *--s;
 
   return dest;
 
@@ -68,8 +83,15 @@ void *__libqasan_memmove(void *dest, const void *src, size_t n) {
 void *__libqasan_memset(void *s, int c, size_t n) {
 
   unsigned char *b = s;
-  while (n--)
-    *(b++) = (unsigned char)c;
+  uintptr_t word = (UINTPTR_MAX / 255) * (unsigned char)c;
+  while (n >= sizeof(word)) {
+
+    __builtin_memcpy(b, &word, sizeof(word));
+    b += sizeof(word);
+    n -= sizeof(word);
+
+  }
+  while (n--) *b++ = (unsigned char)c;
   return s;
 
 }

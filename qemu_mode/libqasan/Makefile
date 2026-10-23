@@ -20,7 +20,10 @@ MAN_PATH    ?= $(PREFIX)/share/man/man8
 
 VERSION     = $(shell grep '^\#define VERSION ' ../config.h | cut -d '"' -f2)
 
-CFLAGS      += -I ../qemuafl/qemuafl/
+CFLAGS      ?= -O2
+# This library defines libc primitives: fortified header inlines conflict
+# with those definitions, and builtin lowering can recurse into their hooks.
+CFLAGS      += -U_FORTIFY_SOURCE -fno-builtin -I ../qemuafl/qemuafl/
 CFLAGS      += -Wno-int-to-void-pointer-cast -ggdb
 LDFLAGS     += -ldl -pthread
 
